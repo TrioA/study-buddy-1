@@ -1,0 +1,27 @@
+StudyBuddy User Instructions
+
+#1. Tell the chatbot your favourite subject first (e.g., "My favourite subject is Maths"). Then type "Career" or "Career Maths/Science/Commerce" to receive career suggestions based on your interests.
+
+#2. To end the conversation, type "Bye", "Goodbye", "Exit", or "See you".
+
+#3. Ask one question at a time for the most accurate and relevant responses.
+
+#4. For study tips, type the subject name (e.g., "Maths", "Science", "English") or simply type "Study Tips".
+
+#5. To learn different study methods, type the method name, such as "Pomodoro Technique", "Active Recall", "Spaced Repetition", or "Feynman Technique".
+
+#6. For maths calculations, type the question naturally, such as "25+36", "Square root 144", "Factorial 5", "LCM 12 18", "HCF 20 30", or "Percentage 80 100".
+
+#7. Type "Challenge Me" to receive a random study challenge or productivity task.
+
+#8. Type "Motivate Me" whenever you need motivation or encouragement to continue studying.
+
+#9. Type "Fact of the Day" to receive one special fact that remains the same throughout the day. Type "Fact" to receive a different random fact every time.
+
+#10. Save your preferences by typing sentences like "My favourite subject is Maths" or "I want to become a Doctor". The chatbot will remember them for future conversations.
+
+#11. To recall your saved information, ask "What is my favourite subject?" or "What is my goal?".
+
+#12. Type "Quiz" (or "Maths Quiz", "Science Quiz", etc.) to test your knowledge with interactive questions.
+
+#13. If the chatbot doesn't understand your question, try rephrasing it using simple and clear English or include the subject/topic name for better results.
