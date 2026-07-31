@@ -32,7 +32,9 @@ DEFAULT_USER = {
     "quiz_score": 0,
     "study_streak": 0,
     "last_login": "",
-    "history": []
+    "pending_context": {},
+    "history": [],
+    "first_run": True
 
 }
 
@@ -54,7 +56,13 @@ def load_user():
 
         with open(DATA_FILE, "r") as file:
 
-            return json.load(file)
+            user = json.load(file)
+            # Ensure pending_context and first_run exist for older user data
+            if "pending_context" not in user:
+                user["pending_context"] = {}
+            if "first_run" not in user:
+                user["first_run"] = False
+            return user
 
     except:
 
@@ -74,60 +82,122 @@ def save_user(user):
 # Bot Typing
 # -----------------------------
 
-def type_text(message, speed=0.03):
+# Global flag to track if typing should be skipped after Ctrl+C
+SKIP_TYPING = False
 
-    print("\n🤖 Bot : ", end="")
+def type_text(message, speed=0.03, prefix=""):
+    global SKIP_TYPING
 
-    for letter in message:
+    print(prefix, end="")
 
-        print(letter, end="", flush=True)
+    if SKIP_TYPING:
+        print(message)
+        return
 
-        time.sleep(speed)
-
-    print()
+    try:
+        for letter in message:
+            print(letter, end="", flush=True)
+            time.sleep(speed)
+        print()
+    except KeyboardInterrupt:
+        SKIP_TYPING = True
+        # Print remainder of message immediately
+        print(message[len(message):] if message.endswith(letter) else letter + message[message.index(letter)+1:])
 
 # -----------------------------
 # Thinking Animation
 # -----------------------------
 
 def thinking_animation():
+    global SKIP_TYPING
 
-    print("\n🤖 Bot : Thinking", end="", flush=True)
+    if SKIP_TYPING:
+        return
 
-    for i in range(3):
+    print("\n🤖 StudyBuddy: Thinking", end="", flush=True)
 
-        time.sleep(0.35)
-
-        print(".", end="", flush=True)
-
-    print()
+    try:
+        for i in range(3):
+            time.sleep(0.35)
+            print(".", end="", flush=True)
+        print()
+    except KeyboardInterrupt:
+        SKIP_TYPING = True
+        print("...")
 
 # -----------------------------
 # Bot Reply
 # -----------------------------
 
 def bot_reply(message):
+    global SKIP_TYPING
+    SKIP_TYPING = False
 
     thinking_animation()
 
-    type_text(fill(str(message), width=75))
+    lines = str(message).split("\n")
+
+    for i, line in enumerate(lines):
+
+        wrapped = fill(line, width=75)
+
+        if i == 0:
+            type_text(wrapped, prefix="🤖 StudyBuddy: ")
+        else:
+            type_text(wrapped, prefix="               ")
+
+def get_user_instructions():
+    """Load and format user_instructions.txt for startup display."""
+    instructions_file = Path("user_instructions.txt")
+    if not instructions_file.exists():
+        return []
+
+    try:
+        with open(instructions_file, "r", encoding="utf-8") as f:
+            lines = [line.strip() for line in f if line.strip()]
+
+        formatted = []
+        for line in lines:
+            if line.startswith("StudyBuddy User Instructions"):
+                formatted.append("📖 " + line.upper())
+            elif line.startswith("#"):
+                # Clean "#1. text" to "• 1. text"
+                clean_item = line.lstrip("#")
+                formatted.append("  • " + clean_item)
+            else:
+                formatted.append(line)
+        return formatted
+    except Exception:
+        return []
 
 # -----------------------------
 # Welcome
 # -----------------------------
 
 def welcome():
+    global SKIP_TYPING
+    SKIP_TYPING = False
+
+    user = load_user()
 
     print("=" * 55)
     print("📚          STUDYBUDDY CHATBOT")
     print("=" * 55)
 
-    for line in WELCOME_MESSAGE:
+    for i, line in enumerate(WELCOME_MESSAGE):
+        if i == 0:
+            type_text(line, prefix="🤖 StudyBuddy: ")
+        else:
+            type_text(line, prefix="               ")
 
-        type_text(line)
-
-    print()
-    type_text("Type a number for quick help: 1 = Tips, 2 = Quote, 3 = Fact, 4 = Challenge, 5 = Career, 6 = Quiz, 7 = Homework, 8 = Maths, 9 = Study Plan")
+    if user.get("first_run", True):
+        instructions = get_user_instructions()
+        if instructions:
+            type_text("", prefix="               ")
+            for line in instructions:
+                type_text(line, prefix="               ")
+        user["first_run"] = False
+        save_user(user)
 
 # -----------------------------
 # Spell Correction
@@ -267,7 +337,7 @@ def remember_info(user, text):
     text = text.strip()
 
     # Name
-    match = re.search(r"(my name is|i am|i'm)\s+([A-Za-z]+)", text, re.I)
+    match = re.search(r"(my name is|i am|i'm|im)\s+([A-Za-z]+)", text, re.I)
 
     if match:
 
@@ -277,7 +347,7 @@ def remember_info(user, text):
 
     # Favourite Subject
     match = re.search(
-        r"(my favourite subject is|my favorite subject is|i like)\s+(.+)",
+        r"(my favourite subject is|my favorite subject is|my fav subject is|i like)\s+(.+)",
         text,
         re.I
     )
@@ -343,6 +413,46 @@ def answer_memory(user, text):
 
 
 # -----------------------------
+# Pending Context Handler
+# -----------------------------
+def handle_pending(user, text):
+
+    pending = user.get("pending_context", {})
+    if not pending:
+        return None
+
+    pending_type = pending.get("type")
+    text_lower = text.lower().strip()
+
+    # Career subject pending
+    if pending_type == "awaiting_career_subject":
+
+        for subject in CAREERS:
+            if subject in text_lower or text_lower == subject:
+                jobs = suggest_career(subject)
+                if jobs:
+                    user["favorite_subject"] = subject.title()
+                    user["pending_context"] = {}
+                    return f"Career ideas for {subject.title()}:\n{jobs}"
+
+        user["pending_context"] = {}
+        return "I'm not sure about careers for that. Try a subject like maths, science, or commerce."
+
+    # Homework subject pending
+    if pending_type == "awaiting_homework_subject":
+
+        for subject in HOMEWORK_GUIDE:
+            if subject in text_lower or text_lower == subject:
+                user["pending_context"] = {}
+                return homework_help(subject)
+
+        user["pending_context"] = {}
+        return "I have homework help for maths, science, english, social science, and computer."
+
+    return None
+
+
+# -----------------------------
 # Context Helper
 # -----------------------------
 def get_context_topic(user, text):
@@ -391,15 +501,15 @@ def handle_menu_command(user, text):
 
         return (
             "Choose a number:\n"
-            "1. Study tip\n"
-            "2. Quote of the day\n"
-            "3. Fact of the day\n"
-            "4. Daily challenge\n"
-            "5. Career suggestion\n"
-            "6. Start quiz\n"
-            "7. Homework help\n"
-            "8. Maths help\n"
-            "9. Study plan"
+            " 1 = Study Tips\n"
+            " 2 = Quote of the Day\n"
+            " 3 = Fact of the Day\n"
+            " 4 = Daily Challenge\n"
+            " 5 = Career Idea\n"
+            " 6 = Quiz\n"
+            " 7 = Homework Help\n"
+            " 8 = Maths Help\n"
+            " 9 = Study Plan"
         )
 
     if command in {"1", "one", "tip", "tips", "study tip", "study tips"}:
@@ -413,49 +523,79 @@ def handle_menu_command(user, text):
         return random_study_tip()
 
     if command in {"2", "two", "quote", "quote of the day", "motivation", "motivational quote"}:
+        if (command.__contains__("day")):
+            index = (today_num*197824) % len(MOTIVATIONAL_QUOTES)
+            return f"Quote of the day:\n{MOTIVATIONAL_QUOTES[index]}"
 
         return f"Quote of the day:\n{motivation()}"
 
     if command in {"3", "three", "fact", "fact of the day", "fun fact"}:
-
+        if (command.__contains__("day") or command.__contains__("3")):
+            index = (today_num*348742) % len(FUN_FACTS)
+            return f"Fact of the day:\n{FUN_FACTS[index]}"
         return f"Fact of the day:\n{fun_fact()}"
 
     if command in {"4", "four", "challenge", "daily challenge"}:
 
         return f"Daily challenge:\n{daily_challenge()}"
 
-    if command in {"5", "five", "career", "career idea", "job idea"}:
+    if command in {"five", "career", "career idea", "job idea"} or "career" in command or command.startswith("5 "):
 
-        topic = get_context_topic(user, text)
+
+        # Try extracting subject from query text (e.g. 'career science', 'science career', '5 science', 'science 5')
+        topic = detect_subject(text) or detect_subject(command)
+
+        if not topic:
+            topic = get_context_topic(user, text)
 
         if not topic and user.get("favorite_subject"):
-
             topic = user["favorite_subject"].lower()
 
         if topic:
-
             jobs = suggest_career(topic)
-
             if jobs:
-
                 return f"Career ideas for {topic.title()}:\n{jobs}"
 
+        # Ask the user for their subject and remember the conversation state
+        user["pending_context"] = {"type": "awaiting_career_subject"}
         return "Tell me your favourite subject first, then I'll suggest suitable careers."
 
-    if command in {"6", "six", "quiz", "start quiz"}:
+    if command in {"6", "six", "quiz", "start quiz"} or "quiz" in command or command.startswith("6 ") or command.endswith(" 6"):
 
-        topic = get_context_topic(user, text) or "general"
+        # Extract number of questions if provided (e.g. "quiz 5", "quiz 10", "6 3", "maths quiz 8")
+        num_match = re.search(r"\b(\d+)\b", text)
+        num_questions = 5
+        if num_match:
+            val = int(num_match.group(1))
+            # Ignore option selection '6' if it was part of "6" command unless it's explicitly "quiz 6"
+            if val != 6 or "quiz 6" in text.lower() or text.strip() == "6":
+                if val != 6 or "quiz 6" in text.lower():
+                    num_questions = val
 
-        return start_quiz(topic)
+        topic = detect_subject(text) or get_context_topic(user, text) or "general"
 
-    if command in {"7", "seven", "homework", "homework help"}:
+        return start_quiz(topic, num_questions=num_questions)
+
+    if command in {"7", "seven", "homework", "homework help"} or re.match(r"^7\s+\w+", command):
 
         topic = get_context_topic(user, text)
+
+        # Also try extracting subject directly from "7 maths" style commands
+        if not topic:
+            match = re.match(r"^7\s+(.+)", command)
+            if match:
+                subj = match.group(1).strip()
+                for subject in HOMEWORK_GUIDE:
+                    if subject in subj or subj == subject:
+                        topic = subject
+                        break
 
         if topic:
 
             return homework_help(topic)
 
+        # Ask the user for their subject and remember the conversation state
+        user["pending_context"] = {"type": "awaiting_homework_subject"}
         return "Tell me the subject for homework help, like maths or science."
 
     if command in {"8", "eight", "math", "maths", "math help", "solve"}:
@@ -488,6 +628,13 @@ def build_reply(user, intents, text):
 
         return memory
 
+    # Check pending context (conversation flow tracking)
+    pending_reply = handle_pending(user, text)
+
+    if pending_reply:
+
+        return pending_reply
+
     menu_reply = handle_menu_command(user, text)
 
     if menu_reply:
@@ -511,6 +658,12 @@ def build_reply(user, intents, text):
 
     # Hidden Commands
     lower_text = text.lower()
+
+    if lower_text.strip() in {"instruction", "instructions", "show instructions", "help instructions"}:
+        instructions = get_user_instructions()
+        if instructions:
+            return "\n".join(instructions)
+        return "No instructions file found."
 
     if "who made you" in lower_text or \
        "who created you" in lower_text or \
@@ -551,6 +704,28 @@ def build_reply(user, intents, text):
 
         return show_help()
 
+    # Career Suggestions
+    if "career" in intents or "career" in text.lower() or "job" in text.lower():
+
+        topic = detect_subject(text) or get_context_topic(user, text)
+
+        if not topic and user.get("favorite_subject"):
+
+            topic = user["favorite_subject"].lower()
+
+        if topic:
+
+            jobs = suggest_career(topic)
+
+            if jobs:
+
+                return f"Career ideas for {topic.title()}:\n{jobs}"
+
+        return (
+            "Tell me your favourite subject first, "
+            "then I'll suggest suitable careers."
+        )
+
     # Subject Tips
     subject = detect_subject(text)
 
@@ -564,32 +739,6 @@ def build_reply(user, intents, text):
     if method:
 
         return study_method(method)
-
-    # Career Suggestions
-    if "career" in intents:
-
-        topic = get_context_topic(user, text)
-
-        if not topic and user["favorite_subject"]:
-
-            topic = user["favorite_subject"].lower()
-
-        if topic:
-
-            jobs = suggest_career(topic)
-
-            if jobs:
-
-                return (
-                    f"Based on your favourite subject "
-                    f"({topic.title()}), "
-                    f"you may enjoy these careers:\n\n{jobs}"
-                )
-
-        return (
-            "Tell me your favourite subject first, "
-            "then I'll suggest suitable careers."
-        )
 
     # Motivation support
     if any(word in lower_text for word in ["stress", "tired", "sad", "burnout", "discouraged", "lazy", "demotivated"]):
@@ -638,6 +787,7 @@ def chat(user_input):
 def start_chatbot():
 
     welcome()
+    last_interrupt_time = 0
 
     while True:
 
@@ -660,6 +810,12 @@ def start_chatbot():
                 break
 
         except KeyboardInterrupt:
+
+            now = time.time()
+            if now - last_interrupt_time < 2.0:
+                print("\n\nGoodbye! Exiting...")
+                break
+            last_interrupt_time = now
 
             print()
 

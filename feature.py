@@ -8,7 +8,7 @@ import re
 import random
 import math
 import statistics
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 from data import *
 
@@ -117,10 +117,13 @@ def random_study_tip():
 
     return f"{subject.title()} Tip:\n{tip}"
 
+today = date.today()
+today_num = int(today.strftime("%Y%m%d"))
+
 # Motivation
 def motivation():
-
-    return random.choice(MOTIVATIONAL_QUOTES)
+    index = (today_num*197824) % len(MOTIVATIONAL_QUOTES)
+    return MOTIVATIONAL_QUOTES[index]
 
 # Random fact
 def fun_fact():
@@ -261,7 +264,7 @@ def maths_helper(text):
 
             value = percentage(nums[0], nums[1])
 
-            return f"Answer : {value}%"
+            return f"Answer : {value}"
 
     # Area of Circle
     if "area of circle" in text:
@@ -316,7 +319,8 @@ def daily_challenge():
 
     ]
 
-    return random.choice(challenges)
+    index = (today_num*345671) % len(challenges)
+    return challenges[index]
 
 
 # Homework help
@@ -338,22 +342,25 @@ def random_quiz():
 
         return None
 # Quiz
-def start_quiz(subject="general"):
+def start_quiz(subject="general", num_questions=5):
 
     if "QUIZ_QUESTIONS" not in globals():
         return "Quiz database not found."
 
     if subject not in QUIZ_QUESTIONS:
-        return "Quiz not available for this subject."
+        subject = "general"
 
-    questions = QUIZ_QUESTIONS[subject]
+    questions = list(QUIZ_QUESTIONS[subject])
+    if not questions:
+        return "No questions available."
+
+    num_questions = min(max(1, int(num_questions)), len(questions))
+    selected_questions = random.sample(questions, num_questions)
     score = 0
 
-    print("\n🤖 Bot : Starting Quiz...\n")
+    print(f"\nBot : Starting {subject.title()} Quiz ({num_questions} questions)...\n")
 
-    random.shuffle(questions)
-
-    for q in questions[:5]:
+    for q in selected_questions:
 
         print(q["question"])
 
@@ -372,7 +379,7 @@ def start_quiz(subject="general"):
         except:
             print("❌ Invalid Input\n")
 
-    return f"Quiz Finished!\nYour Score : {score}/5"
+    return f"Quiz Finished!\nYour Score : {score}/{num_questions}"
 
 
 # Study planner
